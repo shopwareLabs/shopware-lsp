@@ -51,7 +51,7 @@
     "commands": [
       {
         "command": "shopwareLSP.restart",
-        "title": "Restart Shopware Language Server"
+        "title": "Shopware: Restart Language Server"
       },
       {
         "command": "shopwareLSP.forceReindex",

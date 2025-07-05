@@ -1,15 +1,10 @@
 import * as path from 'path';
-import * as fs from 'fs';
 import * as vscode from 'vscode';
-import {
-  LanguageClient,
-  LanguageClientOptions,
-  ServerOptions,
-  TransportKind,
-  RevealOutputChannelOn
-} from 'vscode-languageclient/node';
+import { ClientManager } from './clientManager';
 
-let client: LanguageClient | undefined;
+const languages = ['php', 'xml', 'yml', 'yaml', 'twig', 'json', 'scss'];
+
+let clients: ClientManager;
 // Add a status bar item for indexing status
 let indexingStatusBarItem: vscode.StatusBarItem;
 
@@ -22,85 +17,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   indexingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(indexingStatusBarItem);
 
-  async function startClient() {
-    if (client) {
-      await client.stop();
-      client = undefined;
-    }
+  clients = new ClientManager(context, outputChannel);
 
-    // Clear the output channel when restarting
-    outputChannel.clear();
+  async function startClient(document: vscode.TextDocument) {
+    const workspaceRoot = vscode.workspace.getWorkspaceFolder(document.uri);
 
-    // Get the server path from settings or use default
-    let serverPath = vscode.workspace.getConfiguration('shopwareLSP').get<string>('serverPath', '');
-    
-    // If no custom path is provided, use the bundled server
-    if (!serverPath) {
-      // For development, we'll look for the server in the parent directory
-      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
-      const possiblePaths = [
-        // When installed as extension
-        context.asAbsolutePath(path.join('.', 'shopware-lsp')),
-        // When installed as extension in the parent directory
-        context.asAbsolutePath(path.join('..', 'shopware-lsp')),
-        // When running from source
-        path.join(workspaceRoot, '..', 'shopware-lsp'),
-        // When in the same directory
-        path.join(workspaceRoot, 'shopware-lsp')
-      ];
-
-      for (const p of possiblePaths) {
-        if (fs.existsSync(p)) {
-          serverPath = p;
-          break;
-        }
-      }
-    }
-
-    if (!serverPath) {
-      vscode.window.showErrorMessage('Could not find Symfony Service LSP server. Please set the path in settings.');
+    if (!workspaceRoot || !languages.includes(document.languageId) || document.uri.scheme !== 'file') {
       return;
     }
 
-    // Define server options
-    const serverOptions: ServerOptions = {
-      command: serverPath,
-      args: [],
-      transport: TransportKind.stdio
-    };
+    clients.start(workspaceRoot).then((client) => {
+      if (!client) {
+        return;
+      }
 
-    // Define client options
-    const clientOptions: LanguageClientOptions = {
-      documentSelector: [
-        { scheme: 'file', language: 'php' },
-        { scheme: 'file', language: 'xml' },
-        { scheme: 'file', language: 'yml' },
-        { scheme: 'file', language: 'yaml' },
-        { scheme: 'file', language: 'twig' },
-        { scheme: 'file', language: 'json' },
-        { scheme: 'file', language: 'scss' }
-      ],
-      // Add output configuration
-      outputChannel: outputChannel,
-      traceOutputChannel: outputChannel,
-      revealOutputChannelOn: RevealOutputChannelOn.Error
-    };
-
-    // Show output channel on start
-    outputChannel.appendLine(`Starting Shopware Language Server at ${serverPath}`);
-
-    // Create and start the client
-    client = new LanguageClient(
-      'shopwareLSP',
-      'Shopware Language Server',
-      serverOptions,
-      clientOptions
-    );
-
-    // Register notification handlers
-    client.start().then(() => {
       // Handler for indexing started
-      client!.onNotification('shopware/indexingStarted', () => {
+      client.onNotification('shopware/indexingStarted', () => {
         outputChannel.appendLine('Shopware indexing started');
         indexingStatusBarItem.text = '$(sync~spin) Shopware: Indexing...';
         indexingStatusBarItem.tooltip = 'Shopware language server is currently indexing';
@@ -108,7 +40,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       });
       
       // Handler for indexing completed
-      client!.onNotification('shopware/indexingCompleted', (params: { timeInSeconds: number }) => {
+      client.onNotification('shopware/indexingCompleted', (params: { timeInSeconds: number }) => {
         indexingStatusBarItem.text = `$(check) Shopware: Indexed`;
         indexingStatusBarItem.tooltip = `Indexing completed in ${params.timeInSeconds} seconds`;
         
@@ -122,17 +54,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     });
   }
 
-  // Start client on activation and await it
-  await startClient();
+  async function startAllClients() {
+    // Stop all existing clients 
+    await clients.stop();
+    // Start clients for all opened text documents
+    await Promise.all(vscode.workspace.textDocuments.map(startClient));
+  }
+
+  vscode.workspace.onDidOpenTextDocument(startClient);
+  vscode.workspace.onDidChangeWorkspaceFolders((event) => {
+		for (const folder of event.removed) {
+      // Stop clients for removed workspace folders
+      clients.stop(folder);
+		}
+	});
+
+  await startAllClients();
 
   // Register restart command
   context.subscriptions.push(vscode.commands.registerCommand('shopwareLSP.restart', async () => {
-    await startClient();
+    await startAllClients();
     vscode.window.showInformationMessage('Shopware LSP restarted');
   }));
 
   // Register force reindex command
   context.subscriptions.push(vscode.commands.registerCommand('shopwareLSP.forceReindex', async () => {
+    let client = clients.getActive();
+
     if (!client) {
       vscode.window.showErrorMessage('Shopware LSP is not running');
       return;
@@ -219,6 +167,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   
   // Register create snippet command handler
   context.subscriptions.push(vscode.commands.registerCommand('shopware.createSnippet', async (snippetKey: string, fileUri: string) => {
+    let client = clients.getActive();
+    
     try {
       if (!client) {
         vscode.window.showErrorMessage('Shopware LSP is not running');
@@ -270,6 +220,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('shopware.twig.extendBlock', async (textUri: string, blockName: string) => {
+    let client = clients.getActive();
+    
     if (!client) {
       vscode.window.showErrorMessage('Shopware LSP is not running');
       return;
@@ -320,6 +272,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('shopware.insertSnippet', async () => {
+    let client = clients.getActive();
+    
     if (!client) {
       vscode.window.showErrorMessage('Shopware LSP is not running');
       return;
@@ -355,6 +309,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('shopware.createSnippetFromSelection', async (fileUri: string, selectedText: string) => {
+    let client = clients.getActive();
+    
     try {
       if (!client) {
         vscode.window.showErrorMessage('Shopware LSP is not running');
@@ -418,14 +374,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): Thenable<void> | undefined {
-  if (!client) {
+  if (clients.isEmpty()) {
     return undefined;
   }
   
   // Add a timeout to ensure the server has time to respond
   return new Promise<void>((resolve) => {
     // Try to stop the client gracefully
-    const stopPromise = client!.stop();
+    const stopPromise = clients.stop();
     
     // Set a timeout in case the stop hangs
     const timeout = setTimeout(() => {
