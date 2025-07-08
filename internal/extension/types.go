@@ -1,6 +1,9 @@
 package extension
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"strings"
+)
 
 type ShopwareExtensionType int
 
@@ -16,5 +19,6 @@ type ShopwareExtension struct {
 }
 
 func (e ShopwareExtension) GetStorefrontViewsPath() string {
-	return filepath.Join(e.Path, "Resources", "views")
+	path := strings.TrimSuffix(e.Path, string(filepath.Separator)+e.Name+".php")
+	return filepath.Join(path, "Resources", "views")
 }
