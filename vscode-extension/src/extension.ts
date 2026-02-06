@@ -13,6 +13,20 @@ let client: LanguageClient | undefined;
 // Add a status bar item for indexing status
 let indexingStatusBarItem: vscode.StatusBarItem;
 
+class BlockContentProvider implements vscode.TextDocumentContentProvider {
+  private contents = new Map<string, string>();
+
+  provideTextDocumentContent(uri: vscode.Uri): string {
+    return this.contents.get(uri.toString()) || '';
+  }
+
+  setContent(uri: vscode.Uri, content: string): void {
+    this.contents.set(uri.toString(), content);
+  }
+}
+
+const blockContentProvider = new BlockContentProvider();
+
 interface SnippetFile {
   path: string;
   name: string;
@@ -118,6 +132,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Create status bar item for indexing status
   indexingStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(indexingStatusBarItem);
+
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider('shopware-block', blockContentProvider)
+  );
 
   async function startClient() {
     if (client) {
@@ -238,7 +256,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
     
     try {
-      const result = await client.sendRequest('shopware/forceReindex');
+      await client.sendRequest('shopware/forceReindex');
       vscode.window.showInformationMessage('Shopware LSP: Force reindexing started');
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to trigger force reindexing: ${error}`);
@@ -402,6 +420,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       editor.selection = new vscode.Selection(position, position);
 
       vscode.window.showInformationMessage(`Block ${blockName} extended successfully in ${selected.label}`);
+    }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('shopware.twig.showBlockDiff', async (textUri: string, blockName: string) => {
+    if (!client) {
+      vscode.window.showErrorMessage('Shopware LSP is not running');
+      return;
+    }
+
+    try {
+      type BlockDiffResponse = {
+        blockName: string;
+        originalContent: string;
+        originalVersion: string;
+        currentContent: string;
+        currentVersion: string;
+      };
+
+      const result: { code: string; message: string } | BlockDiffResponse = await client.sendRequest('shopware/twig/getBlockDiff', {
+        textUri,
+        blockName,
+      });
+
+      if ('code' in result) {
+        vscode.window.showErrorMessage(`Block diff error: ${result.message}`);
+        return;
+      }
+
+      if (!result.originalContent || !result.currentContent) {
+        vscode.window.showErrorMessage('Block diff: Missing content in response');
+        return;
+      }
+
+      const originalUri = vscode.Uri.parse(`shopware-block:original/${blockName}.twig?version=${result.originalVersion}`);
+      const currentUri = vscode.Uri.parse(`shopware-block:current/${blockName}.twig?version=${result.currentVersion}`);
+
+      blockContentProvider.setContent(originalUri, result.originalContent);
+      blockContentProvider.setContent(currentUri, result.currentContent);
+
+      const title = `Block "${blockName}": ${result.originalVersion} ↔ ${result.currentVersion}`;
+      await vscode.commands.executeCommand('vscode.diff', originalUri, currentUri, title);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Block diff failed: ${errorMessage}`);
     }
   }));
 

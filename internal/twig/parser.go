@@ -2,10 +2,33 @@ package twig
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
+	"regexp"
 	"strings"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
+
+var shopwareBlockCommentRegex = regexp.MustCompile(`\{#\s*` + VersionCommentPrefix + `\s*([a-f0-9]+)@([\w\.\-]+)\s*#\}`)
+
+func calculateBlockHash(content string) string {
+	hash := sha256.New()
+	hash.Write([]byte(content))
+	return fmt.Sprintf("%x", hash.Sum(nil))
+}
+
+func ParseVersionComment(comment string, line int) *TwigVersionComment {
+	matches := shopwareBlockCommentRegex.FindStringSubmatch(comment)
+	if len(matches) == 3 {
+		return &TwigVersionComment{
+			Hash:    matches[1],
+			Version: matches[2],
+			Line:    line,
+		}
+	}
+	return nil
+}
 
 type TwigFile struct {
 	// Name of the bundle
@@ -18,9 +41,26 @@ type TwigFile struct {
 	ExtendsTagLine int
 }
 
+type TwigVersionComment struct {
+	Hash    string
+	Version string
+	Line    int
+}
+
+type TwigBlockHash struct {
+	Name         string
+	RelativePath string
+	AbsolutePath string
+	Hash         string
+	Text         string
+}
+
 type TwigBlock struct {
-	Name string
-	Line int
+	Name           string
+	Line           int
+	Hash           string
+	Text           string
+	VersionComment *TwigVersionComment
 }
 
 // findBlocks recursively traverses the tree to find all blocks
@@ -30,9 +70,21 @@ func findBlocks(node *tree_sitter.Node, content []byte, file *TwigFile) {
 			child := node.NamedChild(uint(i))
 			if child.Kind() == "identifier" {
 				blockName := string(child.Utf8Text(content))
+				blockText := string(node.Utf8Text(content))
+				blockHash := calculateBlockHash(blockText)
+
+				var versionComment *TwigVersionComment
+				if prevSibling := findPreviousComment(node, content); prevSibling != nil {
+					commentText := string(prevSibling.Utf8Text(content))
+					versionComment = ParseVersionComment(commentText, int(prevSibling.Range().StartPoint.Row)+1)
+				}
+
 				file.Blocks[blockName] = TwigBlock{
-					Name: blockName,
-					Line: int(child.Range().StartPoint.Row) + 1,
+					Name:           blockName,
+					Line:           int(child.Range().StartPoint.Row) + 1,
+					Hash:           blockHash,
+					Text:           blockText,
+					VersionComment: versionComment,
 				}
 				break
 			}
@@ -43,6 +95,35 @@ func findBlocks(node *tree_sitter.Node, content []byte, file *TwigFile) {
 	for i := 0; i < int(node.NamedChildCount()); i++ {
 		findBlocks(node.NamedChild(uint(i)), content, file)
 	}
+}
+
+func findPreviousComment(blockNode *tree_sitter.Node, content []byte) *tree_sitter.Node {
+	parent := blockNode.Parent()
+	if parent == nil {
+		return nil
+	}
+
+	for i := 0; i < int(parent.NamedChildCount()); i++ {
+		child := parent.NamedChild(uint(i))
+
+		if child.Range().StartPoint.Row == blockNode.Range().StartPoint.Row &&
+			child.Range().StartPoint.Column == blockNode.Range().StartPoint.Column {
+			for j := i - 1; j >= 0; j-- {
+				prevSibling := parent.NamedChild(uint(j))
+				if prevSibling.Kind() == "comment" {
+					commentText := string(prevSibling.Utf8Text(content))
+					if strings.Contains(commentText, VersionCommentPrefix) {
+						return prevSibling
+					}
+				}
+				if prevSibling.Kind() == "block" {
+					return nil
+				}
+			}
+			break
+		}
+	}
+	return nil
 }
 
 func ParseTwig(filePath string, node *tree_sitter.Node, content []byte) (*TwigFile, error) {

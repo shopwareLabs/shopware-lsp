@@ -98,21 +98,23 @@ func main() {
 
 	server.RegisterDiagnosticsProvider(diagnostics.NewSnippetDiagnosticsProvider(server))
 	server.RegisterDiagnosticsProvider(diagnostics.NewThemeDiagnosticsProvider(projectRoot, server))
+	server.RegisterDiagnosticsProvider(diagnostics.NewTwigVersioningDiagnosticsProvider(server))
 	server.RegisterDiagnosticsProvider(diagnostics.NewAdminDiagnosticsProvider(server))
 
 	// Register hover providers
 	server.RegisterHoverProvider(hover.NewTwigHoverProvider(projectRoot, server))
 	server.RegisterHoverProvider(hover.NewSnippetHoverProvider(projectRoot, server))
+	server.RegisterHoverProvider(hover.NewTwigVersioningHoverProvider(server))
 	server.RegisterHoverProvider(hover.NewAdminHoverProvider(projectRoot, server))
 
 	// Register code action providers
 	server.RegisterCodeActionProvider(codeaction.NewSnippetCodeActionProvider(server))
-	server.RegisterCodeActionProvider(codeaction.NewTwigCodeActionProvider(server))
+	server.RegisterCodeActionProvider(codeaction.NewTwigCodeActionProvider(projectRoot, server))
 	server.RegisterCodeActionProvider(codeaction.NewAdminCodeActionProvider(server))
 
 	server.RegisterCommandProvider(snippet.NewSnippetCommandProvider(server))
 	server.RegisterCommandProvider(extension.NewExtensionCommandProvider(server))
-	server.RegisterCommandProvider(twig.NewTwigCommandProvider(server))
+	server.RegisterCommandProvider(twig.NewTwigCommandProvider(projectRoot, server))
 
 	if err := server.Start(os.Stdin, os.Stdout); err != nil {
 		log.Fatalf("LSP server error: %v", err)

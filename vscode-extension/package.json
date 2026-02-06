@@ -66,6 +66,14 @@
       {
         "command": "shopware.createSnippetFromSelection",
         "title": "Shopware: Create Snippet from Selection"
+      },
+      {
+        "command": "shopware.twig.extendBlock",
+        "title": "Shopware: Extend Twig Block"
+      },
+      {
+        "command": "shopware.twig.showBlockDiff",
+        "title": "Shopware: Show Twig Block Difference"
       }
     ],
     "menus": {
