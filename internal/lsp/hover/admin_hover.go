@@ -152,11 +152,11 @@ func (p *AdminHoverProvider) buildHoverContent(components []admin.VueComponent) 
 		}
 
 		// Component name header
-		sb.WriteString(fmt.Sprintf("## `%s`\n\n", comp.Name))
+		fmt.Fprintf(&sb, "## `%s`\n\n", comp.Name)
 
 		// Show if it extends another component
 		if comp.ExtendsComponent != "" {
-			sb.WriteString(fmt.Sprintf("**Extends**: `%s`\n\n", comp.ExtendsComponent))
+			fmt.Fprintf(&sb, "**Extends**: `%s`\n\n", comp.ExtendsComponent)
 		}
 
 		// Props section
@@ -182,7 +182,7 @@ func (p *AdminHoverProvider) buildHoverContent(components []admin.VueComponent) 
 		if len(comp.Emits) > 0 {
 			sb.WriteString("### Events\n\n")
 			for _, emit := range comp.Emits {
-				sb.WriteString(fmt.Sprintf("- `%s`\n", emit))
+				fmt.Fprintf(&sb, "- `%s`\n", emit)
 			}
 			sb.WriteString("\n")
 		}
@@ -191,7 +191,7 @@ func (p *AdminHoverProvider) buildHoverContent(components []admin.VueComponent) 
 		if len(comp.Methods) > 0 {
 			sb.WriteString("### Methods\n\n")
 			for _, method := range comp.Methods {
-				sb.WriteString(fmt.Sprintf("- `%s()`\n", method))
+				fmt.Fprintf(&sb, "- `%s()`\n", method)
 			}
 			sb.WriteString("\n")
 		}
@@ -200,7 +200,7 @@ func (p *AdminHoverProvider) buildHoverContent(components []admin.VueComponent) 
 		if len(comp.Computed) > 0 {
 			sb.WriteString("### Computed\n\n")
 			for _, computed := range comp.Computed {
-				sb.WriteString(fmt.Sprintf("- `%s`\n", computed))
+				fmt.Fprintf(&sb, "- `%s`\n", computed)
 			}
 			sb.WriteString("\n")
 		}
@@ -209,7 +209,7 @@ func (p *AdminHoverProvider) buildHoverContent(components []admin.VueComponent) 
 		if len(comp.Slots) > 0 {
 			sb.WriteString("### Slots\n\n")
 			for _, slot := range comp.Slots {
-				sb.WriteString(fmt.Sprintf("- `%s`\n", slot.Name))
+				fmt.Fprintf(&sb, "- `%s`\n", slot.Name)
 			}
 			sb.WriteString("\n")
 		}
@@ -217,10 +217,10 @@ func (p *AdminHoverProvider) buildHoverContent(components []admin.VueComponent) 
 		// File path (relative to project root)
 		if comp.DefinitionPath != "" {
 			displayPath := p.makeRelativePath(comp.DefinitionPath)
-			sb.WriteString(fmt.Sprintf("*Defined in*: `%s`\n", displayPath))
+			fmt.Fprintf(&sb, "*Defined in*: `%s`\n", displayPath)
 		} else if comp.FilePath != "" {
 			displayPath := p.makeRelativePath(comp.FilePath)
-			sb.WriteString(fmt.Sprintf("*Registered in*: `%s`\n", displayPath))
+			fmt.Fprintf(&sb, "*Registered in*: `%s`\n", displayPath)
 		}
 	}
 

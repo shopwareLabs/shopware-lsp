@@ -98,7 +98,7 @@ func (p *SnippetHoverProvider) createHoverForSnippet(snippetKey string, params *
 
 	// Build markdown content showing all translations
 	var markdownContent strings.Builder
-	markdownContent.WriteString(fmt.Sprintf("**Snippet**: `%s`\n\n", snippetKey))
+	fmt.Fprintf(&markdownContent, "**Snippet**: `%s`\n\n", snippetKey)
 	markdownContent.WriteString("**Translations**:\n\n")
 
 	for _, snippet := range snippets {
@@ -112,8 +112,8 @@ func (p *SnippetHoverProvider) createHoverForSnippet(snippetKey string, params *
 		}
 
 		// Format the translation entry
-		markdownContent.WriteString(fmt.Sprintf("- **%s**: `%s`\n", locale, snippet.Text))
-		markdownContent.WriteString(fmt.Sprintf("  <small>%s:%d</small>\n\n", displayPath, snippet.Line))
+		fmt.Fprintf(&markdownContent, "- **%s**: `%s`\n", locale, snippet.Text)
+		fmt.Fprintf(&markdownContent, "  <small>%s:%d</small>\n\n", displayPath, snippet.Line)
 	}
 
 	return &protocol.Hover{

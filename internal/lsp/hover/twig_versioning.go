@@ -80,11 +80,11 @@ func (p *TwigVersioningHoverProvider) hoverBlockIdentifier(node *tree_sitter.Nod
 	originalHash := twig.FindOriginalStorefrontHash(allBlockHashes)
 
 	var hoverText strings.Builder
-	hoverText.WriteString(fmt.Sprintf("**Block:** `%s`\n\n", blockName))
+	fmt.Fprintf(&hoverText, "**Block:** `%s`\n\n", blockName)
 
 	if originalHash != nil {
-		hoverText.WriteString(fmt.Sprintf("**Original Hash:** `%s`\n\n", originalHash.Hash))
-		hoverText.WriteString(fmt.Sprintf("**Template Path:** `%s`\n\n", originalHash.RelativePath))
+		fmt.Fprintf(&hoverText, "**Original Hash:** `%s`\n\n", originalHash.Hash)
+		fmt.Fprintf(&hoverText, "**Template Path:** `%s`\n\n", originalHash.RelativePath)
 
 		twigFiles, err := p.twigIndexer.GetTwigFilesByRelPath(twig.ConvertToRelativePath(uri))
 		if err == nil && len(twigFiles) > 0 {
@@ -93,7 +93,7 @@ func (p *TwigVersioningHoverProvider) hoverBlockIdentifier(node *tree_sitter.Nod
 					hoverText.WriteString("**Status:** Block version is up to date\n\n")
 				} else {
 					hoverText.WriteString("**Status:** Block version is outdated\n\n")
-					hoverText.WriteString(fmt.Sprintf("**Current Version:** `%s`\n\n", block.VersionComment.Version))
+					fmt.Fprintf(&hoverText, "**Current Version:** `%s`\n\n", block.VersionComment.Version)
 				}
 			} else {
 				hoverText.WriteString("❗ **Status:** No version comment found\n\n")
@@ -121,8 +121,8 @@ func (p *TwigVersioningHoverProvider) hoverVersionComment(node *tree_sitter.Node
 
 	var hoverText strings.Builder
 	hoverText.WriteString("**Shopware Block Version Comment**\n\n")
-	hoverText.WriteString(fmt.Sprintf("**Hash:** `%s`\n\n", versionComment.Hash))
-	hoverText.WriteString(fmt.Sprintf("**Version:** `%s`\n\n", versionComment.Version))
+	fmt.Fprintf(&hoverText, "**Hash:** `%s`\n\n", versionComment.Hash)
+	fmt.Fprintf(&hoverText, "**Version:** `%s`\n\n", versionComment.Version)
 
 	blockName := p.findBlockNameAfterComment(node, content)
 	if blockName != "" {
@@ -134,7 +134,7 @@ func (p *TwigVersioningHoverProvider) hoverVersionComment(node *tree_sitter.Node
 					hoverText.WriteString("**Status:** Version comment matches original block\n\n")
 				} else {
 					hoverText.WriteString("**Status:** Version comment is outdated\n\n")
-					hoverText.WriteString(fmt.Sprintf("**Expected Hash:** `%s`\n\n", originalHash.Hash))
+					fmt.Fprintf(&hoverText, "**Expected Hash:** `%s`\n\n", originalHash.Hash)
 				}
 			}
 		}
