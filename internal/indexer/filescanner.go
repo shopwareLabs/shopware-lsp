@@ -23,6 +23,7 @@ var defaultSkipDirs = map[string]bool{
 	"vendor-bin":   true,
 	"bin":          true,
 	"cache":        true,
+	"dist":         true,
 	".git":         true,
 	".github":      true,
 	".gitlab":      true,
@@ -31,6 +32,8 @@ var defaultSkipDirs = map[string]bool{
 	".vscode":      true,
 	"tests":        true,
 	"public":       true,
+	".devenv":      true,
+	".direnv":      true,
 }
 
 // FileScanner scans the project for files and tracks changes
@@ -112,6 +115,21 @@ func (fs *FileScanner) AddIndexer(indexer Indexer) {
 	fs.indexer = append(fs.indexer, indexer)
 }
 
+func shouldSkipRelPath(relPath string) bool {
+	if relPath == "" || relPath == "." {
+		return false
+	}
+
+	pathParts := strings.Split(relPath, string(os.PathSeparator))
+	for _, part := range pathParts {
+		if defaultSkipDirs[part] {
+			return true
+		}
+	}
+
+	return false
+}
+
 // StartWatcher starts watching for file changes in the project directory
 func (fs *FileScanner) StartWatcher() error {
 	// Create a new watcher
@@ -182,18 +200,8 @@ func (fs *FileScanner) StartWatcher() error {
 
 				// Skip directories that should be ignored
 				relPath, err := filepath.Rel(fs.projectRoot, event.Name)
-				if err == nil {
-					pathParts := strings.Split(relPath, string(os.PathSeparator))
-					skip := false
-					for _, part := range pathParts {
-						if defaultSkipDirs[part] {
-							skip = true
-							break
-						}
-					}
-					if skip {
-						continue
-					}
+				if err == nil && shouldSkipRelPath(relPath) {
+					continue
 				}
 
 				// Get file info
@@ -309,13 +317,8 @@ func (fs *FileScanner) addDirectoryToWatcher(dir string) error {
 
 		// Skip directories in the skipDirs list
 		relPath, err := filepath.Rel(fs.projectRoot, path)
-		if err == nil {
-			pathParts := strings.Split(relPath, string(os.PathSeparator))
-			for _, part := range pathParts {
-				if defaultSkipDirs[part] {
-					return filepath.SkipDir
-				}
-			}
+		if err == nil && shouldSkipRelPath(relPath) {
+			return filepath.SkipDir
 		}
 
 		// Add the directory to the watcher
@@ -370,11 +373,8 @@ func (fs *FileScanner) IndexAll(ctx context.Context) error {
 		if info.IsDir() {
 			// Skip directories in the skipDirs list
 			relPath, err := filepath.Rel(fs.projectRoot, path)
-			if err == nil {
-				pathParts := strings.Split(relPath, string(os.PathSeparator))
-				if len(pathParts) == 1 && defaultSkipDirs[pathParts[0]] {
-					return filepath.SkipDir
-				}
+			if err == nil && shouldSkipRelPath(relPath) {
+				return filepath.SkipDir
 			}
 			return nil
 		}
@@ -536,17 +536,7 @@ func (fs *FileScanner) IndexFiles(ctx context.Context, files []string) error {
 			continue
 		}
 
-		// Check if the file is in a directory that should be skipped
-		skip := false
-		pathParts := strings.Split(relPath, string(os.PathSeparator))
-		for _, part := range pathParts {
-			if defaultSkipDirs[part] {
-				skip = true
-				break
-			}
-		}
-
-		if !skip {
+		if !shouldSkipRelPath(relPath) {
 			filteredFiles = append(filteredFiles, path)
 		}
 	}

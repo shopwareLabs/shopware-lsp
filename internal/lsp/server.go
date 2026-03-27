@@ -280,6 +280,14 @@ func (s *Server) handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.
 			} else if forceReindex {
 				log.Println("Force reindex completed successfully")
 			}
+
+			// Start the file watcher after the initial index build to avoid
+			// paying for two recursive traversals during startup.
+			if err := s.fileScanner.StartWatcher(); err != nil {
+				log.Printf("Error starting file watcher: %v", err)
+			} else {
+				log.Println("File watcher started successfully")
+			}
 		}()
 		return nil, nil
 
@@ -523,13 +531,6 @@ func (s *Server) handle(ctx context.Context, conn *jsonrpc2.Conn, req *jsonrpc2.
 func (s *Server) initialize(ctx context.Context, params *protocol.InitializeParams) interface{} {
 	// Extract root path from params
 	s.extractRootPath(params)
-
-	// Start the file watcher
-	if err := s.fileScanner.StartWatcher(); err != nil {
-		log.Printf("Error starting file watcher: %v", err)
-	} else {
-		log.Println("File watcher started successfully")
-	}
 
 	// Collect all trigger characters from providers
 	triggerChars := s.collectTriggerCharacters()
