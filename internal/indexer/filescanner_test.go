@@ -69,6 +69,7 @@ func TestFileScanner_IndexFiles_SkipDirs(t *testing.T) {
 
 	// Verify that files in excluded directories were not indexed
 	excludedFiles := []string{
+		filepath.Join(tempDir, ".devenv", "file.php"),
 		filepath.Join(tempDir, "node_modules", "file.php"),
 		filepath.Join(tempDir, "vendor-bin", "file.php"),
 		filepath.Join(tempDir, "tests", "file.php"),
@@ -80,11 +81,37 @@ func TestFileScanner_IndexFiles_SkipDirs(t *testing.T) {
 	}
 }
 
+func TestFileScanner_IndexAll_SkipDirsAtAnyDepth(t *testing.T) {
+	tempDir := t.TempDir()
+
+	createTestFiles(t, tempDir)
+
+	mockIndexer := &mockIndexer{
+		indexedFiles: make(map[string]bool),
+	}
+
+	fs, err := NewFileScanner(tempDir, filepath.Join(tempDir, "test.db"))
+	require.NoError(t, err)
+	defer func() {
+		assert.NoError(t, fs.Close())
+	}()
+
+	fs.AddIndexer(mockIndexer)
+
+	err = fs.IndexAll(context.Background())
+	require.NoError(t, err)
+
+	assert.True(t, mockIndexer.indexedFiles[filepath.Join(tempDir, "regular", "file.php")], "Regular file was not indexed")
+	assert.False(t, mockIndexer.indexedFiles[filepath.Join(tempDir, ".devenv", "file.php")], "Excluded file was indexed")
+	assert.False(t, mockIndexer.indexedFiles[filepath.Join(tempDir, "nested", "node_modules", "file.php")], "Excluded file was indexed")
+}
+
 // Helper function to create test files
 func createTestFiles(t *testing.T, baseDir string) {
 	// Create directories and files for testing
 	dirs := []string{
 		"regular",
+		".devenv",
 		"node_modules",
 		"vendor-bin",
 		"tests",
